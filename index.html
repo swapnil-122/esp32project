@@ -3,135 +3,197 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32 DHT11 Dashboard</title>
+<title>ESP32 DHT Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f9;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1b1b2f;
+    color: #fff;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 20px;
-    margin: 0;
   }
-  h2 {
-    margin-bottom: 20px;
-    color: #333;
+
+  h1 {
+    margin-bottom: 15px;
+    font-size: 2em;
+    text-align: center;
+    color: #f0f0f0;
   }
+
   .cards {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     gap: 20px;
-  }
-  .card {
-    background-color: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    padding: 20px;
-    text-align: center;
-    width: 180px;
-    transition: transform 0.2s;
-  }
-  .card:hover {
-    transform: translateY(-5px);
-  }
-  .card h3 {
-    margin: 0 0 10px 0;
-    font-size: 18px;
-    color: #555;
-  }
-  .card p {
-    font-size: 24px;
-    font-weight: bold;
-    margin: 0;
-  }
-  canvas {
-    max-width: 600px;
-    width: 100%;
-    margin-top: 40px;
+    margin-bottom: 25px;
   }
 
-  @media (max-width: 600px) {
-    .cards {
-      flex-direction: column;
-      align-items: center;
-    }
-    canvas {
-      max-width: 100%;
-    }
+  .card {
+    background: #2c2c4a;
+    border-radius: 20px;
+    width: 150px;
+    height: 130px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 6px 6px 12px #181829, -6px -6px 12px #343460;
+    transition: transform 0.2s, background 0.3s;
+  }
+
+  .card:hover { transform: scale(1.05); }
+
+  .card h2 {
+    margin: 0;
+    font-size: 2.4em;
+    transition: color 0.3s;
+  }
+
+  .card p {
+    margin: 5px 0 0;
+    font-size: 0.9em;
+    color: #aaa;
+  }
+
+  .chart-container {
+    width: 100%;
+    max-width: 850px;
+    background: #2c2c4a;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 6px 6px 12px #181829, -6px -6px 12px #343460;
+  }
+
+  canvas { border-radius: 10px; }
+
+  .footer {
+    margin-top: 15px;
+    font-size: 0.9em;
+    color: #aaa;
+  }
+
+  @media(max-width:600px){
+    .cards { gap: 15px; }
+    .card { width: 130px; height: 110px; }
   }
 </style>
 </head>
 <body>
 
-<h2>ESP32 DHT11 Dashboard</h2>
+<h1>ESP32 DHT Dashboard</h1>
 
 <div class="cards">
-  <div class="card">
-    <h3>Temperature</h3>
-    <p id="tempCard">-- °C</p>
+  <div class="card" id="tempCardDiv">
+    <h2 id="tempCard">-- °C</h2>
+    <p>Temperature</p>
+    <p id="tempMinMax"></p>
   </div>
-  <div class="card">
-    <h3>Humidity</h3>
-    <p id="humCard">-- %</p>
+  <div class="card" id="humCardDiv">
+    <h2 id="humCard">-- %</h2>
+    <p>Humidity</p>
+    <p id="humMinMax"></p>
   </div>
 </div>
 
-<canvas id="chart"></canvas>
+<div class="chart-container">
+  <canvas id="chart" height="200"></canvas>
+</div>
+
+<div class="footer" id="lastUpdated">Last Updated: --:--:--</div>
 
 <script>
-const FIREBASE_URL = "https://esp32dashboard-8623a-default-rtdb.firebaseio.com/";
+const FIREBASE_URL = "https://esp32dashboard-8623a-default-rtdb.firebaseio.com/dht.json";
 
-let tempData = [], humData = [], labels = [];
+let labels = [];
+let tempData = [];
+let humData = [];
+let tempMin = null;
+let tempMax = null;
+let humMin = null;
+let humMax = null;
 
 const ctx = document.getElementById('chart').getContext('2d');
 const chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: labels,
-        datasets: [
-            { label: 'Temperature (°C)', data: tempData, borderColor: 'red', fill: false },
-            { label: 'Humidity (%)', data: humData, borderColor: 'blue', fill: false }
-        ]
-    },
-    options: {
-        responsive: true,
-        animation: { duration: 0 },
-        plugins: { legend: { position: 'top' } },
-        scales: {
-            x: { title: { display: true, text: 'Time' } },
-            y: { title: { display: true, text: 'Value' }, beginAtZero: true }
-        }
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      {
+        label: 'Temperature (°C)',
+        data: tempData,
+        borderColor: '#FF6384',
+        backgroundColor: ctx.createLinearGradient(0,0,0,200),
+        tension: 0.3,
+        fill: true,
+      },
+      {
+        label: 'Humidity (%)',
+        data: humData,
+        borderColor: '#36A2EB',
+        backgroundColor: ctx.createLinearGradient(0,0,0,200),
+        tension: 0.3,
+        fill: true,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: '#fff' } } },
+    scales: {
+      x: { ticks: { color: '#fff' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+      y: { ticks: { color: '#fff' }, grid: { color: 'rgba(255,255,255,0.1)' } }
     }
+  }
 });
 
-async function fetchData() {
-    try {
-        const res = await fetch(FIREBASE_URL + ".json");
-        const data = await res.json();
-        if(!data) return;
+function fetchData() {
+  fetch(FIREBASE_URL)
+    .then(res => res.json())
+    .then(data => {
+      if(!data) return;
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString();
+      
+      labels.push(timeStr);
+      tempData.push(data.temp);
+      humData.push(data.hum);
 
-        const now = new Date().toLocaleTimeString();
-        labels.push(now);
-        tempData.push(data.temp || 0);
-        humData.push(data.hum || 0);
+      // Maintain last 20 readings
+      if(labels.length > 20){
+        labels.shift(); tempData.shift(); humData.shift();
+      }
 
-        if(labels.length > 20){
-            labels.shift(); tempData.shift(); humData.shift();
-        }
+      chart.update();
 
-        chart.update();
-        document.getElementById("tempCard").innerText = (data.temp || "--") + " °C";
-        document.getElementById("humCard").innerText = (data.hum || "--") + " %";
+      // Update cards
+      document.getElementById('tempCard').innerText = data.temp + " °C";
+      document.getElementById('humCard').innerText = data.hum + " %";
 
-    } catch (err) {
-        console.error("Fetch error:", err);
-    }
+      // Track Min/Max
+      tempMin = tempMin === null ? data.temp : Math.min(tempMin, data.temp);
+      tempMax = tempMax === null ? data.temp : Math.max(tempMax, data.temp);
+      humMin = humMin === null ? data.hum : Math.min(humMin, data.hum);
+      humMax = humMax === null ? data.hum : Math.max(humMax, data.hum);
+
+      document.getElementById('tempMinMax').innerText = `Min: ${tempMin} | Max: ${tempMax}`;
+      document.getElementById('humMinMax').innerText = `Min: ${humMin} | Max: ${humMax}`;
+
+      // Color alert if high temp or low humidity
+      document.getElementById('tempCard').style.color = data.temp > 35 ? '#FF4500' : '#FF6384';
+      document.getElementById('humCard').style.color = data.hum < 30 ? '#FF4500' : '#36A2EB';
+
+      // Update timestamp
+      document.getElementById('lastUpdated').innerText = "Last Updated: " + timeStr;
+
+    })
+    .catch(err => console.log("Fetch error: ", err));
 }
 
-// Auto refresh every 2 seconds
 setInterval(fetchData, 2000);
 fetchData();
 </script>
