@@ -8,48 +8,38 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-/* ===== Body & Layout ===== */
 body {
   margin:0; font-family:'Segoe UI', sans-serif;
-  background:#1b1b2f; color:#fff;
-  display:flex; flex-direction:column; align-items:center; padding:20px;
+  background:#1b1b2f; color:#fff; padding:15px;
 }
-h1 {
-  margin-bottom:25px; font-size:2.2em;
-  text-align:center; color:#f0f0f0;
-  text-shadow: 1px 1px 5px rgba(0,0,0,0.5);
-}
+h1 { text-align:center; margin-bottom:20px; font-size:1.8em; }
 .cards {
-  display:flex; flex-wrap:wrap; justify-content:center; gap:25px; margin-bottom:30px;
+  display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-bottom:20px;
 }
 .card {
-  background:#2c2c4a; border-radius:20px; width:180px; height:150px;
+  background:#2c2c4a; border-radius:12px; width:150px; height:120px;
   display:flex; flex-direction:column; justify-content:center; align-items:center;
-  position:relative;
-  box-shadow: 8px 8px 15px #181829, -8px -8px 15px #343460;
-  transition: transform 0.3s, box-shadow 0.3s;
+  position:relative; padding:8px;
 }
-.card:hover { transform: scale(1.05); box-shadow: 10px 10px 20px #181829, -10px -10px 20px #343460; }
-.card h2 { margin:0; font-size:2.8em; transition: color 0.3s; }
-.card p { margin:5px 0 0; font-size:0.9em; color:#aaa; text-align:center; }
+.card h2 { margin:0; font-size:2em; }
+.card p { margin:4px 0 0; font-size:0.8em; color:#aaa; text-align:center; }
 .offline-overlay {
   position:absolute; top:0; left:0; right:0; bottom:0;
-  background:rgba(27,27,47,0.85);
+  background:rgba(27,27,47,0.8);
   display:flex; align-items:center; justify-content:center;
-  color:#ff4c4c; font-weight:bold; font-size:1em; border-radius:20px;
-  z-index:2; display:none; text-shadow:0 0 5px #000;
+  color:#ff4c4c; font-weight:bold; font-size:0.9em; border-radius:12px;
+  display:none;
 }
 .chart-container {
-  width:100%; max-width:950px; background:#2c2c4a;
-  padding:25px 20px; border-radius:20px; box-shadow:8px 8px 15px #181829, -8px -8px 15px #343460;
-  margin-bottom:20px;
+  width:100%; max-width:900px; background:#2c2c4a;
+  padding:15px; border-radius:12px; margin-bottom:15px;
 }
-canvas { border-radius:10px; }
-.footer { font-size:0.9em; color:#aaa; text-align:center; }
-@media(max-width:600px){
-  .cards { gap:15px; }
-  .card { width:140px; height:120px; }
-  .card h2 { font-size:2em; }
+canvas { border-radius:8px; }
+.footer { font-size:0.85em; color:#aaa; text-align:center; }
+@media(max-width:450px){
+  .cards { gap:8px; }
+  .card { width:130px; height:110px; }
+  .card h2 { font-size:1.6em; }
 }
 </style>
 </head>
@@ -73,13 +63,13 @@ canvas { border-radius:10px; }
 </div>
 
 <div class="chart-container">
-  <canvas id="chart" height="250"></canvas>
+  <canvas id="chart" height="200"></canvas>
 </div>
 
 <div class="footer" id="lastUpdated">Last Updated: --:--:--</div>
 
 <script>
-// --- Firebase Setup ---
+// Firebase Config
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -92,38 +82,25 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const dbRef = firebase.database().ref('dht');
 
-// --- Chart Setup ---
+// Chart Setup
 const ctx = document.getElementById('chart').getContext('2d');
 let labels=[], tempData=[], humData=[];
 let tempMin=null, tempMax=null, humMin=null, humMax=null;
 
-function getGradient(colorStart,colorEnd){
-  const gradient=ctx.createLinearGradient(0,0,0,250);
-  gradient.addColorStop(0,colorStart);
-  gradient.addColorStop(1,colorEnd);
-  return gradient;
-}
-
-const chart=new Chart(ctx,{
+const chart = new Chart(ctx, {
   type:'line',
   data:{
-    labels:labels,
+    labels: labels,
     datasets:[
-      {label:'Temperature (°C)', data:tempData, borderColor:'#FF6384', backgroundColor:getGradient('rgba(255,99,132,0.4)','rgba(255,99,132,0)'), tension:0.3, fill:true, pointRadius:4, pointHoverRadius:6},
-      {label:'Humidity (%)', data:humData, borderColor:'#36A2EB', backgroundColor:getGradient('rgba(54,162,235,0.4)','rgba(54,162,235,0)'), tension:0.3, fill:true, pointRadius:4, pointHoverRadius:6}
+      {label:'Temperature (°C)', data: tempData, borderColor:'#FF6384', backgroundColor:'rgba(255,99,132,0.2)', tension:0.2, fill:true},
+      {label:'Humidity (%)', data: humData, borderColor:'#36A2EB', backgroundColor:'rgba(54,162,235,0.2)', tension:0.2, fill:true}
     ]
   },
   options:{
     responsive:true,
     interaction:{mode:'index', intersect:false},
-    plugins:{
-      legend:{labels:{color:'#fff'}},
-      tooltip:{backgroundColor:'#2c2c4a', titleColor:'#fff', bodyColor:'#fff'}
-    },
-    scales:{
-      x:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}},
-      y:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}}
-    }
+    plugins:{legend:{labels:{color:'#fff'}}, tooltip:{backgroundColor:'#2c2c4a', titleColor:'#fff', bodyColor:'#fff'}},
+    scales:{x:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}}, y:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}}}
   }
 });
 
@@ -138,7 +115,7 @@ function updateOffline(isOffline){
   document.getElementById('humOffline').style.display=isOffline?'flex':'none';
 }
 
-// --- Firebase Realtime Listener ---
+// Firebase Realtime Listener
 let lastTimestamp=0;
 dbRef.on('value', snapshot => {
   const data = snapshot.val();
@@ -148,7 +125,6 @@ dbRef.on('value', snapshot => {
   const timeStr = now.toLocaleTimeString();
   const ts = data.timestamp || now.getTime();
 
-  // offline if no new data in 10s
   const offline = (Date.now() - ts) > 10000;
   updateOffline(offline);
   if(offline){
@@ -157,8 +133,7 @@ dbRef.on('value', snapshot => {
     return;
   }
 
-  // ignore duplicates
-  if(ts <= lastTimestamp) return;
+  if(ts <= lastTimestamp) return; // ignore duplicates
   lastTimestamp = ts;
 
   // Chart update
@@ -174,7 +149,7 @@ dbRef.on('value', snapshot => {
   document.getElementById('tempMinMax').innerText = `Min: ${tempMin} | Max: ${tempMax}`;
   document.getElementById('humMinMax').innerText = `Min: ${humMin} | Max: ${humMax}`;
 
-  // Update cards with alerts
+  // Update cards with alert colors
   updateCard('tempCard', data.temp+' °C', data.temp>35);
   updateCard('humCard', data.hum+' %', data.hum<30);
   document.getElementById('lastUpdated').innerText = "Last Updated: "+timeStr;
