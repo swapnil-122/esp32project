@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 DHT11 Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: Arial; background: #f0f2f5; text-align:center; padding:20px; }
+  .card { display:inline-block; padding:20px; margin:10px; background:#fff; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:150px; }
+  canvas { max-width:600px; margin-top:30px; }
+</style>
+</head>
+<body>
+<h2>ESP32 DHT11 Dashboard</h2>
+<div class="card" id="tempCard">Temp: -- °C</div>
+<div class="card" id="humCard">Hum: -- %</div>
+<canvas id="chart"></canvas>
+
+<script>
+const FIREBASE_URL = "https://esp32dashboard-8623a-default-rtdb.firebaseio.com/";
+
+let tempData = [], humData = [], labels = [];
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [
+            { label: 'Temperature °C', data: tempData, borderColor: 'red', fill: false },
+            { label: 'Humidity %', data: humData, borderColor: 'blue', fill: false }
+        ]
+    },
+    options: { responsive:true, animation:false }
+});
+
+function fetchData(){
+    fetch(FIREBASE_URL + ".json")
+    .then(res => res.json())
+    .then(data => {
+        if(!data) return;
+        const now = new Date().toLocaleTimeString();
+        labels.push(now);
+        tempData.push(data.temp || 0);
+        humData.push(data.hum || 0);
+
+        if(labels.length > 20){
+            labels.shift(); tempData.shift(); humData.shift();
+        }
+        chart.update();
+
+        document.getElementById("tempCard").innerText = "Temp: " + (data.temp || "--") + " °C";
+        document.getElementById("humCard").innerText = "Hum: " + (data.hum || "--") + " %";
+    })
+    .catch(err => console.log("Fetch error:", err));
+}
+
+setInterval(fetchData, 2000);
+fetchData();
+</script>
+</body>
+</html>
