@@ -4,40 +4,94 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ESP32 DHT Dashboard</title>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 body {
-  margin:0; font-family:'Segoe UI', sans-serif;
-  background:#1b1b2f; color:#fff; padding:15px;
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: #1b1b2f;
+  color: #fff;
+  padding: 15px;
 }
-h1 { text-align:center; margin-bottom:20px; font-size:1.8em; }
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1.8em;
+}
 .cards {
-  display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-bottom:20px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 .card {
-  background:#2c2c4a; border-radius:12px; width:150px; height:120px;
-  display:flex; flex-direction:column; justify-content:center; align-items:center;
-  position:relative; padding:8px;
+  background: #2c2c4a;
+  border-radius: 12px;
+  width: 150px;
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  padding: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  transition: transform 0.2s ease;
 }
-.card h2 { margin:0; font-size:2em; }
-.card p { margin:4px 0 0; font-size:0.8em; color:#aaa; text-align:center; }
+.card:hover { transform: scale(1.03); }
+.card h2 {
+  margin: 0;
+  font-size: 2em;
+  transition: color 0.3s, transform 0.2s;
+}
+.card h2.alert {
+  color: #ff4c4c;
+  transform: scale(1.1);
+}
+.card p {
+  margin: 4px 0 0;
+  font-size: 0.8em;
+  color: #aaa;
+  text-align: center;
+}
 .offline-overlay {
-  position:absolute; top:0; left:0; right:0; bottom:0;
-  background:rgba(27,27,47,0.8);
-  display:flex; align-items:center; justify-content:center;
-  color:#ff4c4c; font-weight:bold; font-size:0.9em; border-radius:12px;
-  display:none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(27,27,47,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff4c4c;
+  font-weight: bold;
+  font-size: 0.9em;
+  border-radius: 12px;
+  display: none;
+  transition: opacity 0.5s;
 }
 .chart-container {
-  width:100%; max-width:900px; background:#2c2c4a;
-  padding:15px; border-radius:12px; margin-bottom:15px;
+  width: 100%;
+  max-width: 900px;
+  background: #2c2c4a;
+  padding: 15px;
+  border-radius: 12px;
+  margin: 0 auto 15px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
 }
-canvas { border-radius:8px; }
-.footer { font-size:0.85em; color:#aaa; text-align:center; }
+canvas { border-radius: 8px; }
+.footer {
+  font-size: 0.85em;
+  color: #aaa;
+  text-align: center;
+}
+#loading {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 1em;
+  color: #bbb;
+}
 @media(max-width:450px){
-  .cards { gap:8px; }
+  .cards { gap: 8px; }
   .card { width:130px; height:110px; }
   .card h2 { font-size:1.6em; }
 }
@@ -62,97 +116,115 @@ canvas { border-radius:8px; }
   </div>
 </div>
 
+<div id="loading">Loading latest data...</div>
+
 <div class="chart-container">
   <canvas id="chart" height="200"></canvas>
 </div>
 
 <div class="footer" id="lastUpdated">Last Updated: --:--:--</div>
 
-<script>
-// Firebase Config
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+
+// --- Firebase config ---
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  apiKey: "AIzaSyA5RYlBjPq-zMYk56rkSK0JGFEdoqaAfiI",
+  authDomain: "esp32dashboard-8623a.firebaseapp.com",
   databaseURL: "https://esp32dashboard-8623a-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  projectId: "esp32dashboard-8623a",
+  storageBucket: "esp32dashboard-8623a.firebasestorage.app",
+  messagingSenderId: "976361805933",
+  appId: "1:976361805933:web:bd7691a6794f64725b4764"
 };
-firebase.initializeApp(firebaseConfig);
-const dbRef = firebase.database().ref('dht');
 
-// Chart Setup
-const ctx = document.getElementById('chart').getContext('2d');
-let labels=[], tempData=[], humData=[];
-let tempMin=null, tempMax=null, humMin=null, humMax=null;
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const dhtRef = ref(db, "dht");
 
+// --- Chart setup ---
+const ctx = document.getElementById("chart").getContext("2d");
+let labels = [], tempData = [], humData = [];
+let tempMin = null, tempMax = null, humMin = null, humMax = null;
 const chart = new Chart(ctx, {
-  type:'line',
-  data:{
+  type: "line",
+  data: {
     labels: labels,
-    datasets:[
-      {label:'Temperature (°C)', data: tempData, borderColor:'#FF6384', backgroundColor:'rgba(255,99,132,0.2)', tension:0.2, fill:true},
-      {label:'Humidity (%)', data: humData, borderColor:'#36A2EB', backgroundColor:'rgba(54,162,235,0.2)', tension:0.2, fill:true}
+    datasets: [
+      { label: "Temperature (°C)", data: tempData, borderColor: "#FF6384", backgroundColor: "rgba(255,99,132,0.2)", tension: 0.25, borderWidth: 2.5, pointRadius: 0, fill: true },
+      { label: "Humidity (%)", data: humData, borderColor: "#36A2EB", backgroundColor: "rgba(54,162,235,0.2)", tension: 0.25, borderWidth: 2.5, pointRadius: 0, fill: true }
     ]
   },
-  options:{
-    responsive:true,
-    interaction:{mode:'index', intersect:false},
-    plugins:{legend:{labels:{color:'#fff'}}, tooltip:{backgroundColor:'#2c2c4a', titleColor:'#fff', bodyColor:'#fff'}},
-    scales:{x:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}}, y:{ticks:{color:'#fff'}, grid:{color:'rgba(255,255,255,0.1)'}}}
+  options: {
+    responsive: true,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { labels: { color: "#fff" } }, tooltip: { backgroundColor: "#2c2c4a", titleColor: "#fff", bodyColor: "#fff" } },
+    scales: { x: { ticks: { color: "#fff" }, grid: { color: "rgba(255,255,255,0.1)" } }, y: { ticks: { color: "#fff" }, grid: { color: "rgba(255,255,255,0.1)" } } }
   }
 });
 
-function updateCard(id,value,alert=false,alertColor='#FF4500',normalColor='#fff'){
-  const el=document.getElementById(id);
-  el.innerText=value;
-  el.style.color=alert?alertColor:normalColor;
+const TEMP_ALERT = 35;
+const HUM_ALERT = 30;
+const OFFLINE_TIMEOUT = 30000; // 30 seconds
+let lastTimestamp = 0;
+
+function updateCard(id, value, alert=false){
+  const el = document.getElementById(id);
+  el.innerText = value;
+  if(alert) el.classList.add("alert"); else el.classList.remove("alert");
 }
 
 function updateOffline(isOffline){
-  document.getElementById('tempOffline').style.display=isOffline?'flex':'none';
-  document.getElementById('humOffline').style.display=isOffline?'flex':'none';
+  document.getElementById("tempOffline").style.display = isOffline ? "flex" : "none";
+  document.getElementById("humOffline").style.display = isOffline ? "flex" : "none";
 }
 
-// Firebase Realtime Listener
-let lastTimestamp=0;
-dbRef.on('value', snapshot => {
+onValue(dhtRef, (snapshot) => {
   const data = snapshot.val();
   if(!data) return;
+  document.getElementById("loading").style.display = "none";
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString();
   const ts = data.timestamp || now.getTime();
 
-  const offline = (Date.now() - ts) > 10000;
+  const offline = (Date.now() - ts) > OFFLINE_TIMEOUT;
   updateOffline(offline);
+
   if(offline){
-    updateCard('tempCard','-- °C'); updateCard('humCard','-- %');
-    document.getElementById('lastUpdated').innerText = "ESP32 Offline";
+    updateCard("tempCard", "-- °C");
+    updateCard("humCard", "-- %");
+    document.getElementById("tempMinMax").innerText = "";
+    document.getElementById("humMinMax").innerText = "";
+    document.getElementById("lastUpdated").innerText = `ESP32 Offline (Last seen ${(Date.now() - ts)/1000 | 0}s ago)`;
     return;
   }
 
-  if(ts <= lastTimestamp) return; // ignore duplicates
+  if(ts <= lastTimestamp) return;
   lastTimestamp = ts;
 
+  const temp = parseFloat(data.temp);
+  const hum = parseFloat(data.hum);
+  if(isNaN(temp) || isNaN(hum)) return;
+
   // Chart update
-  labels.push(timeStr); tempData.push(data.temp); humData.push(data.hum);
-  if(labels.length>20){ labels.shift(); tempData.shift(); humData.shift(); }
-  chart.update();
+  labels.push(timeStr); tempData.push(temp); humData.push(hum);
+  if(labels.length > 20){ labels.shift(); tempData.shift(); humData.shift(); }
+  chart.update("none");
 
   // Min/Max tracking
-  tempMin = tempMin===null?data.temp:Math.min(tempMin,data.temp);
-  tempMax = tempMax===null?data.temp:Math.max(tempMax,data.temp);
-  humMin = humMin===null?data.hum:Math.min(humMin,data.hum);
-  humMax = humMax===null?data.hum:Math.max(humMax,data.hum);
-  document.getElementById('tempMinMax').innerText = `Min: ${tempMin} | Max: ${tempMax}`;
-  document.getElementById('humMinMax').innerText = `Min: ${humMin} | Max: ${humMax}`;
+  tempMin = tempMin===null?temp:Math.min(tempMin,temp);
+  tempMax = tempMax===null?temp:Math.max(tempMax,temp);
+  humMin = humMin===null?hum:Math.min(humMin,hum);
+  humMax = humMax===null?hum:Math.max(humMax,hum);
+  document.getElementById("tempMinMax").innerText = `Min: ${tempMin} | Max: ${tempMax}`;
+  document.getElementById("humMinMax").innerText = `Min: ${humMin} | Max: ${humMax}`;
 
-  // Update cards with alert colors
-  updateCard('tempCard', data.temp+' °C', data.temp>35);
-  updateCard('humCard', data.hum+' %', data.hum<30);
-  document.getElementById('lastUpdated').innerText = "Last Updated: "+timeStr;
+  // Update cards with alerts
+  updateCard("tempCard", `${temp} °C`, temp > TEMP_ALERT);
+  updateCard("humCard", `${hum} %`, hum < HUM_ALERT);
+  document.getElementById("lastUpdated").innerText = "Last Updated: " + timeStr;
 });
 </script>
 
