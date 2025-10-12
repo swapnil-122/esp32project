@@ -1,57 +1,302 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP32 DHT Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Health Monitoring Dashboard — ESP32</title>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
 <style>
-body { margin:0; font-family:'Segoe UI',sans-serif; background:#1b1b2f; color:#fff; padding:15px; }
-h1 { text-align:center; margin-bottom:20px; font-size:1.8em; }
-.cards { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin-bottom:20px; }
-.card { background:#2c2c4a; border-radius:12px; width:150px; height:120px; display:flex; flex-direction:column; justify-content:center; align-items:center; position:relative; padding:8px; box-shadow:0 2px 10px rgba(0,0,0,0.3); }
-.card h2 { margin:0; font-size:2em; }
-.card h2.alert { color:#ff4c4c; }
-.card p { margin:4px 0 0; font-size:0.8em; color:#aaa; text-align:center; }
-.offline-overlay { position:absolute; top:0; left:0; right:0; bottom:0; background:rgba(27,27,47,0.8); display:flex; align-items:center; justify-content:center; color:#ff4c4c; font-weight:bold; font-size:0.9em; border-radius:12px; display:none; transition:opacity 0.5s; }
-.chart-container { width:100%; max-width:900px; background:#2c2c4a; padding:15px; border-radius:12px; margin:0 auto 15px; box-shadow:0 2px 12px rgba(0,0,0,0.25); }
-canvas { border-radius:8px; }
-.footer { font-size:0.85em; color:#aaa; text-align:center; }
-#loading { text-align:center; margin-top:20px; font-size:1em; color:#bbb; }
-@media(max-width:450px){ .cards { gap:8px; } .card { width:130px; height:110px; } .card h2 { font-size:1.6em; } }
+:root{
+  --bg-color:#0f1226;
+  --text-color:#ecf0ff;
+  --card-bg:linear-gradient(145deg,#131428,#1f1f35);
+  --muted:#9aa3c0;
+  --accent:#36A2EB;
+  --accent-2:#4BC0C0;
+  --danger:#ff4c4c;
+  --success:#2bd36b;
+  --glass:rgba(255,255,255,0.03);
+  --card-shadow:0 8px 30px rgba(0,0,0,0.45);
+  --radius:14px;
+  color-scheme:dark;
+}
+
+body.light {
+  --bg-color:#f4f6fb;
+  --text-color:#0a1122;
+  --card-bg:linear-gradient(145deg,#ffffff,#eef2fb);
+  --muted:#586074;
+  --accent:#1f78d1;
+  --accent-2:#0b9e92;
+  --danger:#ff4c4c;
+  --success:#1f9a5a;
+  --glass:rgba(0,0,0,0.03);
+  --card-shadow:0 6px 18px rgba(20,20,40,0.06);
+  color-scheme:light;
+}
+
+body {
+  margin:0;
+  font-family:Inter,"Segoe UI",Roboto,system-ui;
+  background:var(--bg-color);
+  color:var(--text-color);
+  padding:12px;
+  transition:background 0.4s,color 0.4s;
+  -webkit-font-smoothing:antialiased;
+}
+
+.header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  max-width:1200px;
+  margin:0 auto 12px;
+  flex-wrap:wrap;
+}
+
+.title {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex:1 1 auto;
+}
+
+.logo {
+  width:48px;
+  height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:12px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  box-shadow:0 6px 20px rgba(54,162,235,0.14);
+  font-weight:700;
+  font-size:1.1rem;
+  color:#fff;
+}
+
+h1 {
+  font-size:1.25rem;
+  margin:0;
+}
+
+.controls {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.summary {
+  max-width:1200px;
+  margin:12px auto 18px;
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+.stat {
+  min-width:140px;
+  max-width:260px;
+  flex:1 1 140px;
+  background:var(--card-bg);
+  border-radius:var(--radius);
+  padding:12px 14px;
+  box-shadow:var(--card-shadow);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  transition:background 0.3s,transform 0.2s;
+}
+.stat:hover { transform:translateY(-3px); }
+
+.stat .label {
+  font-size:0.78rem;
+  color:var(--muted);
+}
+
+.stat .value {
+  font-size:1.35rem;
+  font-weight:700;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  transition:color 0.3s;
+  word-break:break-word;
+}
+
+.chart-container {
+  max-width:1100px;
+  margin:0 auto 14px;
+  background:var(--card-bg);
+  padding:14px;
+  border-radius:12px;
+  box-shadow:var(--card-shadow);
+  overflow-x:auto;
+}
+
+#chart {
+  width:100%;
+  max-height:300px;
+}
+
+.controls .btn {
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.08);
+  color:inherit;
+  padding:10px 14px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+  transition:background 0.2s,transform 0.2s,border 0.2s;
+  font-size:0.9rem;
+}
+
+body.light .controls .btn {
+  border:1px solid rgba(0,0,0,0.08);
+}
+
+.controls .btn:hover {
+  transform:translateY(-2px);
+  background:rgba(255,255,255,0.05);
+}
+
+.controls .btn.primary {
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  color:#fff;
+  border:none;
+  box-shadow:0 8px 20px rgba(54,162,235,0.12);
+}
+
+.controls .small {
+  font-size:0.85rem;
+  padding:8px 10px;
+}
+
+.modal-backdrop {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.4);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:60;
+  padding:10px;
+}
+
+.modal {
+  width:100%;
+  max-width:640px;
+  background:var(--card-bg);
+  padding:16px;
+  border-radius:12px;
+  box-shadow:var(--card-shadow);
+  max-height:90vh;
+  overflow-y:auto;
+}
+
+.form-row {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin:8px 0;
+  flex-wrap:wrap;
+}
+
+.form-row label {
+  width:120px;
+  color:var(--muted);
+  font-size:0.9rem;
+}
+
+.form-row input[type="number"] {
+  padding:8px;
+  border-radius:8px;
+  border:1px solid rgba(0,0,0,0.07);
+  width:100%;
+  max-width:180px;
+}
+
+.footer {
+  text-align:center;
+  color:var(--muted);
+  font-size:0.85rem;
+  margin-top:6px;
+}
+
+.last-updated {
+  font-size:0.85rem;
+  color:var(--muted);
+  margin-top:2px;
+}
+
+@media(max-width:600px){
+  .header{flex-direction:column;align-items:flex-start;gap:8px;}
+  .controls{width:100%;justify-content:space-between;}
+  .summary{gap:8px;}
+  .stat .value{font-size:1.2rem;}
+}
 </style>
 </head>
 <body>
 
-<h1>ESP32 DHT Dashboard</h1>
-
-<div class="cards">
-  <div class="card" id="tempCardDiv">
-    <div class="offline-overlay" id="tempOffline">Offline</div>
-    <h2 id="tempCard">-- °C</h2>
-    <p>Temperature</p>
-    <p id="tempMinMax"></p>
+<div class="header">
+  <div class="title">
+    <div class="logo">HM</div>
+    <div>
+      <h1>Health Monitoring — Dashboard</h1>
+      <div class="last-updated" id="lastUpdated">Last Updated: --</div>
+    </div>
   </div>
-  <div class="card" id="humCardDiv">
-    <div class="offline-overlay" id="humOffline">Offline</div>
-    <h2 id="humCard">-- %</h2>
-    <p>Humidity</p>
-    <p id="humMinMax"></p>
+  <div class="controls">
+    <button class="btn small" id="toggleThemeBtn">Toggle Theme</button>
+    <button class="btn small" id="settingsBtn">Settings</button>
+    <button class="btn primary small" id="exportCsvBtn">Export CSV</button>
   </div>
 </div>
 
-<div id="loading">Loading latest data...</div>
+<div class="summary">
+  <div class="stat"><div class="label">Body Temp (°F)</div><div class="value" id="bodyTemp">--</div></div>
+  <div class="stat"><div class="label">Room Temp (°C)</div><div class="value" id="roomTemp">--</div></div>
+  <div class="stat"><div class="label">Humidity (%)</div><div class="value" id="hum">--</div></div>
+  <div class="stat"><div class="label">Heart Rate (BPM)</div><div class="value" id="pulse">--</div></div>
+  <div class="stat"><div class="label">SpO₂ (%)</div><div class="value" id="spo2">--</div></div>
+</div>
+
+<div class="stat"><div class="label">Average (last 2 readings)</div>
+  <div class="value" id="averages">BPM: -- | SpO₂: --</div>
+</div>
 
 <div class="chart-container">
-  <canvas id="chart" height="200"></canvas>
+  <canvas id="chart"></canvas>
 </div>
 
-<div class="footer" id="lastUpdated">Last Updated: --:--:--</div>
+<div class="footer">ESP32 Health Monitoring Dashboard © 2025</div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+<!-- Settings Modal -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h2>Settings</h2>
+    <div class="form-row"><label>Heart Rate Min (BPM):</label><input type="number" id="hrMin" value="50"></div>
+    <div class="form-row"><label>Heart Rate Max (BPM):</label><input type="number" id="hrMax" value="120"></div>
+    <div class="form-row"><label>SpO₂ Min (%):</label><input type="number" id="spo2Min" value="90"></div>
+    <div class="form-row"><label>Body Temp Max (°F):</label><input type="number" id="bodyTempMax" value="100.4"></div>
+    <div style="text-align:right; margin-top:12px;">
+      <button class="btn primary" id="closeSettings">Close</button>
+    </div>
+  </div>
+</div>
 
+<script>
+// Firebase Setup
 const firebaseConfig = {
   apiKey: "AIzaSyA5RYlBjPq-zMYk56rkSK0JGFEdoqaAfiI",
   authDomain: "esp32dashboard-8623a.firebaseapp.com",
@@ -61,69 +306,99 @@ const firebaseConfig = {
   messagingSenderId: "976361805933",
   appId: "1:976361805933:web:bd7691a6794f64725b4764"
 };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref("HealthMonitor");
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-const dhtRef = ref(db, "dht");
+const bodyTempEl = document.getElementById("bodyTemp");
+const roomTempEl = document.getElementById("roomTemp");
+const humEl = document.getElementById("hum");
+const pulseEl = document.getElementById("pulse");
+const spo2El = document.getElementById("spo2");
+const lastUpdatedEl = document.getElementById("lastUpdated");
+const averagesEl = document.getElementById("averages");
+
+let chartLabels=[], bodyTempData=[], pulseData=[], spo2Data=[];
+let pulseHistory=[], spo2History=[];
 
 const ctx = document.getElementById("chart").getContext("2d");
-let labels=[], tempData=[], humData=[], tempMin=null, tempMax=null, humMin=null, humMax=null;
-const chart = new Chart(ctx, {
-  type: "line",
-  data: { labels, datasets:[
-    { label:"Temperature (°C)", data:tempData, borderColor:"#FF6384", backgroundColor:"rgba(255,99,132,0.2)", tension:0.25, borderWidth:2.5, pointRadius:0, fill:true },
-    { label:"Humidity (%)", data:humData, borderColor:"#36A2EB", backgroundColor:"rgba(54,162,235,0.2)", tension:0.25, borderWidth:2.5, pointRadius:0, fill:true }
-  ]},
-  options: { responsive:true, interaction:{mode:"index",intersect:false}, plugins:{legend:{labels:{color:"#fff"}}, tooltip:{backgroundColor:"#2c2c4a",titleColor:"#fff",bodyColor:"#fff"}}, scales:{ x:{ticks:{color:"#fff"},grid:{color:"rgba(255,255,255,0.1)"}}, y:{ticks:{color:"#fff"},grid:{color:"rgba(255,255,255,0.1)"}} } }
+const chart = new Chart(ctx,{
+  type:"line",
+  data:{
+    labels:chartLabels,
+    datasets:[
+      {label:"Body Temp °F",data:[],borderColor:"#36A2EB",backgroundColor:"rgba(54,162,235,0.2)",tension:0.3},
+      {label:"Heart Rate BPM",data:[],borderColor:"#FF6384",backgroundColor:"rgba(255,99,132,0.2)",tension:0.3},
+      {label:"SpO₂ %",data:[],borderColor:"#4BC0C0",backgroundColor:"rgba(75,192,192,0.2)",tension:0.3}
+    ]
+  },
+  options:{ responsive:true, animation:false,
+    scales:{ y:{ beginAtZero:true, grid:{color:"rgba(255,255,255,0.1)"} }, x:{ grid:{color:"rgba(255,255,255,0.05)"} } },
+    plugins:{ legend:{ labels:{ color:"var(--muted)" } } }
+  }
 });
 
-const TEMP_ALERT=35, HUM_ALERT=30, OFFLINE_TIMEOUT=30000;
-let lastTimestamp=0;
+function updateChartTheme() {
+  const isLight = document.body.classList.contains("light");
+  const textColor = isLight ? "#0a1122" : "#ecf0ff";
+  const gridColor = isLight ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)";
+  chart.options.scales.x.grid.color = gridColor;
+  chart.options.scales.y.grid.color = gridColor;
+  chart.options.plugins.legend.labels.color = textColor;
+  chart.update();
+}
 
-function updateCard(id,value,alert=false){ const el=document.getElementById(id); el.innerText=value; if(alert) el.classList.add("alert"); else el.classList.remove("alert"); }
-function updateOffline(isOffline){ document.getElementById("tempOffline").style.display=isOffline?"flex":"none"; document.getElementById("humOffline").style.display=isOffline?"flex":"none"; }
+function updateData({bodyTemp,temp,hum,pulse,spo2}) {
+  const bodyTempF = (bodyTemp*1.8 + 32).toFixed(1);
+  bodyTempEl.textContent = bodyTempF;
+  roomTempEl.textContent = temp.toFixed(1);
+  humEl.textContent = hum.toFixed(0);
+  pulseEl.textContent = pulse.toFixed(0);
+  spo2El.textContent = spo2.toFixed(0);
+  lastUpdatedEl.textContent = "Last Updated: " + new Date().toLocaleTimeString();
 
-onValue(dhtRef,(snapshot)=>{
-  const data=snapshot.val();
-  if(!data) return;
-  document.getElementById("loading").style.display="none";
+  if(chartLabels.length >= 30){ chartLabels.shift(); bodyTempData.shift(); pulseData.shift(); spo2Data.shift(); }
+  chartLabels.push(new Date().toLocaleTimeString());
+  bodyTempData.push(bodyTempF);
+  pulseData.push(pulse);
+  spo2Data.push(spo2);
 
-  const now=Date.now();
-  const ts=Number(data.timestamp) || now;
+  chart.data.labels = chartLabels;
+  chart.data.datasets[0].data = bodyTempData;
+  chart.data.datasets[1].data = pulseData;
+  chart.data.datasets[2].data = spo2Data;
+  chart.update();
 
-  const offline=(now - ts) > OFFLINE_TIMEOUT;
-  updateOffline(offline);
+  pulseHistory.push(pulse); if(pulseHistory.length>2)pulseHistory.shift();
+  spo2History.push(spo2); if(spo2History.length>2)spo2History.shift();
 
-  if(offline){
-    updateCard("tempCard","-- °C");
-    updateCard("humCard","-- %");
-    document.getElementById("tempMinMax").innerText="";
-    document.getElementById("humMinMax").innerText="";
-    document.getElementById("lastUpdated").innerText=`ESP32 Offline (Last seen ${(now-ts)/1000|0}s ago)`;
-    return;
-  }
+  const avg = arr => arr.length===2?((arr[0]+arr[1])/2).toFixed(1):arr[0]?.toFixed(1)||"--";
+  averagesEl.textContent = `BPM: ${avg(pulseHistory)} | SpO₂: ${avg(spo2History)}`;
 
-  if(ts <= lastTimestamp) return;
-  lastTimestamp=ts;
+  const hrMin = +document.getElementById("hrMin").value;
+  const hrMax = +document.getElementById("hrMax").value;
+  const spo2Min = +document.getElementById("spo2Min").value;
+  const bodyTempMax = +document.getElementById("bodyTempMax").value;
 
-  const temp=parseFloat(data.temp), hum=parseFloat(data.hum);
-  if(isNaN(temp)||isNaN(hum)) return;
+  pulseEl.style.color = (pulse<hrMin||pulse>hrMax)?"var(--danger)":"var(--success)";
+  spo2El.style.color = (spo2<spo2Min)?"var(--danger)":"var(--success)";
+  bodyTempEl.style.color = (bodyTempF>bodyTempMax)?"var(--danger)":"var(--success)";
+}
 
-  const timeStr=new Date(ts).toLocaleTimeString();
-  labels.push(timeStr); tempData.push(temp); humData.push(hum);
-  if(labels.length>20){ labels.shift(); tempData.shift(); humData.shift(); }
-  chart.update("none");
+db.on('value', snapshot=>{
+  const val = snapshot.val();
+  if(val){ updateData({ bodyTemp: val.BodyTemperature_C, temp: val.RoomTemperature_C, hum: val.Humidity_Percentage, pulse: val.HeartRate_BPM, spo2: val.SpO2_Percentage }); }
+});
 
-  tempMin=tempMin===null?temp:Math.min(tempMin,temp);
-  tempMax=tempMax===null?temp:Math.max(tempMax,temp);
-  humMin=humMin===null?hum:Math.min(humMin,hum);
-  humMax=humMax===null?hum:Math.max(humMax,hum);
-  document.getElementById("tempMinMax").innerText=`Min: ${tempMin} | Max: ${tempMax}`;
-  document.getElementById("humMinMax").innerText=`Min: ${humMin} | Max: ${humMax}`;
+document.getElementById("toggleThemeBtn").addEventListener("click",()=>{document.body.classList.toggle("light"); updateChartTheme();});
+const modalBackdrop = document.getElementById("modalBackdrop");
+document.getElementById("settingsBtn").addEventListener("click",()=>modalBackdrop.style.display="flex");
+document.getElementById("closeSettings").addEventListener("click",()=>modalBackdrop.style.display="none");
 
-  updateCard("tempCard",`${temp} °C`, temp>TEMP_ALERT);
-  updateCard("humCard",`${hum} %`, hum<HUM_ALERT);
-  document.getElementById("lastUpdated").innerText="Last Updated: "+timeStr;
+document.getElementById("exportCsvBtn").addEventListener("click",()=>{
+  let csv = "Time,BodyTemp°F,BPM,SpO₂\n";
+  for(let i=0;i<chartLabels.length;i++){ csv += `${chartLabels[i]},${bodyTempData[i]},${pulseData[i]},${spo2Data[i]}\n`; }
+  const blob = new Blob([csv],{type:"text/csv"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="health_data.csv"; a.click();
 });
 </script>
 </body>
